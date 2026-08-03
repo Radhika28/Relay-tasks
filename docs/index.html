@@ -1,0 +1,788 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<title>Relay — quick task capture</title>
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#14171c">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Relay">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png">
+<style>
+  :root{
+    --bg: #14171c;
+    --panel: #1b1f26;
+    --card: #21262e;
+    --line: #2c323b;
+    --amber: #ffb020;
+    --amber-dim: #8a5f16;
+    --teal: #4fd1c5;
+    --text: #e8eaed;
+    --muted: #8a919c;
+    --high: #ff6b6b;
+    --med: #ffb020;
+    --low: #4fd1c5;
+    --radius: 10px;
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;background:transparent;color:var(--text);}
+  body{
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    display:flex; justify-content:center;
+  }
+  .app{
+    width:100%; max-width:560px;
+    background: var(--bg);
+    min-height: 100vh;
+    padding: 18px 16px 40px;
+  }
+  @font-face{}
+  .brand{
+    display:flex; align-items:baseline; justify-content:space-between;
+    margin-bottom: 18px;
+  }
+  .brand h1{
+    font-family: 'Space Grotesk', 'Inter', sans-serif;
+    font-size: 22px; font-weight: 700; letter-spacing: -0.02em;
+    margin:0; color: var(--text);
+  }
+  .brand .dot{ color: var(--amber); }
+  .brand .sub{
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.08em;
+  }
+
+  /* Capture bar */
+  .capture{
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    padding: 14px;
+    margin-bottom: 18px;
+  }
+  .capture-row{
+    display:flex; gap:10px; align-items:flex-start;
+  }
+  textarea#taskInput{
+    flex:1; resize:none; min-height:46px; max-height:140px;
+    background: var(--card); border: 1px solid var(--line); border-radius: 8px;
+    color: var(--text); font-size: 15px; font-family: inherit;
+    padding: 12px 12px; line-height: 1.4;
+    outline:none;
+  }
+  textarea#taskInput:focus{ border-color: var(--amber-dim); }
+  textarea#taskInput::placeholder{ color: var(--muted); }
+
+  .mic-btn{
+    flex-shrink:0;
+    width:46px; height:46px; border-radius:50%;
+    border: 1px solid var(--line);
+    background: var(--card);
+    color: var(--muted);
+    display:flex; align-items:center; justify-content:center;
+    cursor:pointer;
+    transition: all .15s ease;
+  }
+  .mic-btn:hover{ border-color: var(--amber-dim); color: var(--amber); }
+  .mic-btn.listening{
+    background: var(--amber);
+    color: #14171c;
+    border-color: var(--amber);
+    animation: pulse 1.1s ease-in-out infinite;
+  }
+  @keyframes pulse{
+    0%,100%{ box-shadow: 0 0 0 0 rgba(255,176,32,0.45); }
+    50%{ box-shadow: 0 0 0 8px rgba(255,176,32,0); }
+  }
+  .mic-hint{
+    font-family:'JetBrains Mono', monospace;
+    font-size:11px; color: var(--amber);
+    margin-top:8px; min-height:14px;
+  }
+
+  .priority-row{
+    display:flex; gap:8px; margin-top:12px;
+  }
+  .prio-btn{
+    flex:1; padding:8px 6px; border-radius:7px; border:1px solid var(--line);
+    background: var(--card); color: var(--muted); font-size:12px; font-weight:600;
+    letter-spacing:.03em; text-transform:uppercase; cursor:pointer;
+    font-family: 'JetBrains Mono', monospace;
+    transition: all .12s ease;
+  }
+  .prio-btn[data-p="high"].active{ background: rgba(255,107,107,.15); border-color: var(--high); color: var(--high); }
+  .prio-btn[data-p="medium"].active{ background: rgba(255,176,32,.15); border-color: var(--med); color: var(--med); }
+  .prio-btn[data-p="low"].active{ background: rgba(79,209,197,.15); border-color: var(--low); color: var(--low); }
+
+  .add-row{
+    display:flex; justify-content:flex-end; margin-top:12px;
+  }
+  .add-btn{
+    background: var(--amber); color: #14171c; border:none; border-radius:7px;
+    padding: 10px 18px; font-weight:700; font-size:13px; cursor:pointer;
+    font-family: 'Space Grotesk', sans-serif;
+  }
+  .add-btn:disabled{ opacity:.4; cursor:not-allowed; }
+  .add-btn:hover:not(:disabled){ background:#ffc147; }
+
+  /* Controls above list */
+  .list-controls{
+    display:flex; align-items:center; justify-content:space-between;
+    margin-bottom: 10px;
+  }
+  .list-controls .count{
+    font-family:'JetBrains Mono', monospace; font-size:11px; color: var(--muted); text-transform:uppercase; letter-spacing:.06em;
+  }
+  .sort-toggle{
+    display:flex; gap:4px; background: var(--panel); border:1px solid var(--line); border-radius:7px; padding:3px;
+  }
+  .sort-toggle button{
+    background:transparent; border:none; color:var(--muted); font-size:11px; font-family:'JetBrains Mono', monospace;
+    padding:5px 9px; border-radius:5px; cursor:pointer; text-transform:uppercase;
+  }
+  .sort-toggle button.active{ background: var(--card); color: var(--amber); }
+
+  /* Tickets */
+  #list{ display:flex; flex-direction:column; gap:10px; }
+  .ticket{
+    position:relative;
+    background: var(--card);
+    border: 1px solid var(--line);
+    border-left: 3px solid var(--med);
+    border-radius: 8px;
+    padding: 12px 14px 12px 14px;
+  }
+  .ticket[data-p="high"]{ border-left-color: var(--high); }
+  .ticket[data-p="medium"]{ border-left-color: var(--med); }
+  .ticket[data-p="low"]{ border-left-color: var(--low); }
+
+  .ticket-top{
+    display:flex; justify-content:space-between; align-items:flex-start; gap:10px;
+  }
+  .ticket-text{
+    font-size: 15px; line-height:1.45; color: var(--text); white-space:pre-wrap; word-break:break-word;
+    flex:1;
+  }
+  .ticket-text.done{ color: var(--muted); text-decoration: line-through; }
+  .badge{
+    font-family:'JetBrains Mono', monospace; font-size:10px; font-weight:700;
+    padding: 3px 7px; border-radius:5px; text-transform:uppercase; letter-spacing:.05em;
+    flex-shrink:0;
+  }
+  .badge[data-p="high"]{ background: rgba(255,107,107,.15); color: var(--high); }
+  .badge[data-p="medium"]{ background: rgba(255,176,32,.15); color: var(--med); }
+  .badge[data-p="low"]{ background: rgba(79,209,197,.15); color: var(--low); }
+
+  .ticket-meta{
+    display:flex; justify-content:space-between; align-items:center;
+    margin-top:10px; padding-top:9px; border-top:1px dashed var(--line);
+  }
+  .timestamp{
+    font-family:'JetBrains Mono', monospace; font-size:11px; color: var(--muted);
+  }
+  .ticket-actions{ display:flex; gap:14px; }
+  .ticket-actions button{
+    background:none; border:none; color: var(--muted); font-size:11px; cursor:pointer;
+    font-family:'JetBrains Mono', monospace; text-transform:uppercase; letter-spacing:.04em;
+    padding:2px 0;
+  }
+  .ticket-actions button:hover{ color: var(--amber); }
+  .ticket-actions button.del:hover{ color: var(--high); }
+
+  .edit-area{
+    width:100%; background: var(--panel); border:1px solid var(--amber-dim); border-radius:6px;
+    color: var(--text); font-family:inherit; font-size:14px; padding:8px; resize:none; margin-top:8px;
+  }
+  .edit-controls{ display:flex; gap:8px; margin-top:6px; }
+  .edit-controls button{
+    font-size:11px; font-family:'JetBrains Mono', monospace; text-transform:uppercase;
+    border-radius:5px; border:1px solid var(--line); background:var(--panel); color:var(--text);
+    padding:5px 10px; cursor:pointer;
+  }
+  .edit-controls .save{ border-color: var(--amber); color: var(--amber); }
+  .edit-prio{ display:flex; gap:6px; margin-top:8px; }
+  .edit-prio button{
+    font-size:10px; padding:4px 8px; border-radius:5px; border:1px solid var(--line); background:var(--panel);
+    color:var(--muted); cursor:pointer; font-family:'JetBrains Mono', monospace; text-transform:uppercase;
+  }
+  .edit-prio button.active[data-p="high"]{ border-color: var(--high); color: var(--high); }
+  .edit-prio button.active[data-p="medium"]{ border-color: var(--med); color: var(--med); }
+  .edit-prio button.active[data-p="low"]{ border-color: var(--low); color: var(--low); }
+
+  .empty{
+    text-align:center; padding: 40px 10px; color: var(--muted);
+  }
+  .empty .glyph{ font-size:26px; margin-bottom:8px; }
+  .empty p{ font-size:13px; margin:4px 0; }
+
+  /* Share bar */
+  .share-bar{
+    margin-top: 22px; display:flex; gap:10px;
+  }
+  .share-btn{
+    flex:1; display:flex; align-items:center; justify-content:center; gap:7px;
+    padding: 12px 10px; border-radius:8px; font-size:13px; font-weight:700; cursor:pointer;
+    font-family:'Space Grotesk', sans-serif; border:1px solid var(--line); background: var(--panel); color: var(--text);
+  }
+  .share-btn.wa{ border-color:#25D36655; }
+  .share-btn.wa:hover{ background: rgba(37,211,102,.1); border-color:#25D366; color:#25D366; }
+  .share-btn.mail{ border-color: var(--amber-dim); }
+  .share-btn.mail:hover{ background: rgba(255,176,32,.1); border-color: var(--amber); color: var(--amber); }
+  .share-btn:disabled{ opacity:.35; cursor:not-allowed; }
+
+  .clear-row{ text-align:center; margin-top:14px; }
+  .clear-row button{
+    background:none; border:none; color: var(--muted); font-size:11px; text-decoration:underline;
+    cursor:pointer; font-family:'JetBrains Mono', monospace;
+  }
+  .clear-row button:hover{ color: var(--high); }
+
+  .status{
+    text-align:center; font-family:'JetBrains Mono', monospace; font-size:11px; color: var(--muted); margin: 8px 0 18px;
+  }
+
+  #autoPanel{ padding: 0; overflow:hidden; }
+  .auto-header{
+    display:flex; justify-content:space-between; align-items:center;
+    padding: 12px 14px; cursor:pointer; font-family:'Space Grotesk', sans-serif; font-size:13px; font-weight:700; color: var(--teal);
+  }
+  .auto-chevron{ transition: transform .15s ease; color: var(--muted); }
+  .auto-chevron.open{ transform: rotate(180deg); }
+  .auto-body{ padding: 0 14px 14px; }
+  .auto-desc{ font-size:12px; color: var(--muted); margin: 0 0 12px; line-height:1.5; }
+  .auto-desc a{ color: var(--teal); }
+  .auto-label{ display:block; font-family:'JetBrains Mono', monospace; font-size:10px; text-transform:uppercase; letter-spacing:.05em; color: var(--muted); margin: 10px 0 4px; }
+  .auto-input{
+    width:100%; background: var(--card); border:1px solid var(--line); border-radius:7px;
+    color: var(--text); font-size:13px; padding: 9px 10px; font-family: inherit;
+  }
+  .auto-input:focus{ outline:none; border-color: var(--amber-dim); }
+  .auto-toggle-row{ margin-top:12px; }
+  .switch-label{ display:flex; align-items:center; gap:8px; font-size:12px; color: var(--text); cursor:pointer; }
+  .switch-label input{ accent-color: var(--amber); width:15px; height:15px; }
+  .auto-actions{ display:flex; gap:8px; margin-top:12px; }
+  .auto-save, .auto-test{
+    flex:1; padding: 9px; border-radius:7px; font-size:12px; font-weight:700; cursor:pointer;
+    font-family:'Space Grotesk', sans-serif; border:1px solid var(--line); background: var(--card); color: var(--text);
+  }
+  .auto-save:hover{ border-color: var(--amber); color: var(--amber); }
+  .auto-test:hover{ border-color: var(--teal); color: var(--teal); }
+  .auto-status{ font-family:'JetBrains Mono', monospace; font-size:11px; color: var(--muted); margin-top:10px; min-height:14px; }
+
+  @media (prefers-reduced-motion: reduce){
+    .mic-btn.listening{ animation:none; }
+  }
+</style>
+</head>
+<body>
+
+<div class="app">
+  <div class="brand">
+    <h1>Relay<span class="dot">.</span></h1>
+    <div class="sub">task capture</div>
+  </div>
+
+  <div class="capture">
+    <div class="capture-row">
+      <textarea id="taskInput" placeholder="Say it or type it — e.g. 'Call the plumber about the leak'" rows="1"></textarea>
+      <button class="mic-btn" id="micBtn" title="Speak a task">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"></path><path d="M19 10v2a7 7 0 0 1-14 0v-2"></path><line x1="12" y1="19" x2="12" y2="23"></line><line x1="8" y1="23" x2="16" y2="23"></line></svg>
+      </button>
+    </div>
+    <div class="mic-hint" id="micHint"></div>
+
+    <div class="priority-row" id="prioRow">
+      <button class="prio-btn" data-p="high">High</button>
+      <button class="prio-btn active" data-p="medium">Medium</button>
+      <button class="prio-btn" data-p="low">Low</button>
+    </div>
+
+    <div class="add-row">
+      <button class="add-btn" id="addBtn">Add task</button>
+    </div>
+  </div>
+
+  <div class="capture" id="autoPanel">
+    <div class="auto-header" id="autoToggleHeader">
+      <span>⚙ Automation setup</span>
+      <span class="auto-chevron" id="autoChevron">▾</span>
+    </div>
+    <div class="auto-body" id="autoBody" style="display:none;">
+      <p class="auto-desc">Connect this app to your GitHub automation repo so tasks send automatically. <a href="#" id="autoHelpLink">Full setup guide is in the README.</a></p>
+      <label class="auto-label">GitHub username</label>
+      <input type="text" id="ghOwner" class="auto-input" placeholder="e.g. yourname">
+      <label class="auto-label">Repo name</label>
+      <input type="text" id="ghRepo" class="auto-input" placeholder="e.g. relay-tasks">
+      <label class="auto-label">Personal Access Token</label>
+      <input type="password" id="ghToken" class="auto-input" placeholder="fine-grained token, repo-scoped">
+      <div class="auto-toggle-row">
+        <label class="switch-label">
+          <input type="checkbox" id="autoSendToggle">
+          Send automatically the instant I add a task
+        </label>
+      </div>
+      <div class="auto-actions">
+        <button class="auto-save" id="autoSaveBtn">Save connection</button>
+        <button class="auto-test" id="autoTestBtn">Send now</button>
+      </div>
+      <div class="auto-status" id="autoStatus"></div>
+    </div>
+  </div>
+
+  <div class="list-controls">
+    <div class="count" id="countLabel">0 tasks</div>
+    <div class="sort-toggle">
+      <button data-sort="priority" class="active">By priority</button>
+      <button data-sort="newest">Newest</button>
+    </div>
+  </div>
+
+  <div id="list"></div>
+
+  <div class="share-bar">
+    <button class="share-btn wa" id="waBtn">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor"><path d="M17.6 6.32A7.85 7.85 0 0 0 12.05 4a7.94 7.94 0 0 0-6.9 11.9L4 20l4.2-1.1a7.9 7.9 0 0 0 3.85 1h0a7.94 7.94 0 0 0 7.94-7.94 7.9 7.9 0 0 0-2.4-5.64zm-5.55 12.2h0a6.6 6.6 0 0 1-3.36-.92l-.24-.14-2.5.65.67-2.43-.16-.25a6.6 6.6 0 1 1 5.6 3.1zm3.6-4.94c-.2-.1-1.17-.58-1.35-.64s-.32-.1-.45.1-.5.64-.62.77-.23.15-.43.05a5.4 5.4 0 0 1-1.6-.98 5.9 5.9 0 0 1-1.1-1.37c-.12-.2 0-.3.09-.4s.2-.23.3-.35a1.4 1.4 0 0 0 .2-.33.37.37 0 0 0 0-.35c-.05-.1-.45-1.08-.62-1.48s-.33-.33-.45-.33h-.38a.73.73 0 0 0-.53.25 2.24 2.24 0 0 0-.7 1.67 3.9 3.9 0 0 0 .82 2.06 8.9 8.9 0 0 0 3.4 3 9.8 9.8 0 0 0 1.14.42 2.75 2.75 0 0 0 1.26.08 2.06 2.06 0 0 0 1.35-.95 1.7 1.7 0 0 0 .12-.95c-.05-.08-.18-.13-.38-.23z"></path></svg>
+      WhatsApp
+    </button>
+    <button class="share-btn mail" id="mailBtn">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 4h16v16H4z" opacity="0"></path><path d="M22 6l-10 7L2 6"></path><rect x="2" y="4" width="20" height="16" rx="2"></rect></svg>
+      Email
+    </button>
+  </div>
+
+  <div class="clear-row"><button id="clearAllBtn">Clear all tasks</button></div>
+  <div class="status" id="statusLine"></div>
+</div>
+
+<script>
+(function(){
+  const STORAGE_KEY = 'relay:tasks';
+  let tasks = [];
+  let sortMode = 'priority';
+  let currentPriority = 'medium';
+  let editingId = null;
+
+  const list = document.getElementById('list');
+  const input = document.getElementById('taskInput');
+  const addBtn = document.getElementById('addBtn');
+  const countLabel = document.getElementById('countLabel');
+  const statusLine = document.getElementById('statusLine');
+  const micBtn = document.getElementById('micBtn');
+  const micHint = document.getElementById('micHint');
+
+  function uid(){ return 't' + Date.now() + Math.random().toString(36).slice(2,7); }
+
+  function prioWeight(p){ return p === 'high' ? 0 : p === 'medium' ? 1 : 2; }
+
+  function fmtDateTime(iso){
+    const d = new Date(iso);
+    const datePart = d.toLocaleDateString(undefined, { day:'2-digit', month:'short', year:'numeric' });
+    const timePart = d.toLocaleTimeString(undefined, { hour:'2-digit', minute:'2-digit' });
+    return datePart + ' · ' + timePart;
+  }
+
+  async function loadTasks(){
+    statusLine.textContent = 'Loading your tasks…';
+    try{
+      const res = await window.storage.get(STORAGE_KEY, false);
+      tasks = res && res.value ? JSON.parse(res.value) : [];
+    }catch(e){
+      tasks = [];
+    }
+    statusLine.textContent = '';
+    render();
+  }
+
+  async function saveTasks(){
+    try{
+      const ok = await window.storage.set(STORAGE_KEY, JSON.stringify(tasks), false);
+      if(!ok){ statusLine.textContent = 'Could not save — try again.'; }
+    }catch(e){
+      statusLine.textContent = 'Could not save — try again.';
+    }
+  }
+
+  function sortedTasks(){
+    const copy = [...tasks];
+    if(sortMode === 'priority'){
+      copy.sort((a,b) => prioWeight(a.priority) - prioWeight(b.priority) || b.createdAt - a.createdAt);
+    } else {
+      copy.sort((a,b) => b.createdAt - a.createdAt);
+    }
+    return copy;
+  }
+
+  function render(){
+    countLabel.textContent = tasks.length + (tasks.length === 1 ? ' task' : ' tasks');
+    list.innerHTML = '';
+
+    if(tasks.length === 0){
+      list.innerHTML = '<div class="empty"><div class="glyph">🗒️</div><p>Nothing captured yet.</p><p>Speak or type your first task above.</p></div>';
+      updateShareButtons();
+      return;
+    }
+
+    sortedTasks().forEach(task => {
+      const el = document.createElement('div');
+      el.className = 'ticket';
+      el.setAttribute('data-p', task.priority);
+
+      if(editingId === task.id){
+        el.innerHTML = `
+          <textarea class="edit-area" rows="2">${escapeHtml(task.text)}</textarea>
+          <div class="edit-prio">
+            <button data-p="high" class="${task.priority==='high'?'active':''}">High</button>
+            <button data-p="medium" class="${task.priority==='medium'?'active':''}">Medium</button>
+            <button data-p="low" class="${task.priority==='low'?'active':''}">Low</button>
+          </div>
+          <div class="edit-controls">
+            <button class="save">Save</button>
+            <button class="cancel">Cancel</button>
+          </div>
+        `;
+        const ta = el.querySelector('.edit-area');
+        let editPrio = task.priority;
+        el.querySelectorAll('.edit-prio button').forEach(b => {
+          b.addEventListener('click', () => {
+            editPrio = b.getAttribute('data-p');
+            el.querySelectorAll('.edit-prio button').forEach(x => x.classList.remove('active'));
+            b.classList.add('active');
+          });
+        });
+        el.querySelector('.save').addEventListener('click', () => {
+          const val = ta.value.trim();
+          if(!val) return;
+          task.text = val;
+          task.priority = editPrio;
+          editingId = null;
+          saveTasks();
+          render();
+        });
+        el.querySelector('.cancel').addEventListener('click', () => {
+          editingId = null;
+          render();
+        });
+      } else {
+        el.innerHTML = `
+          <div class="ticket-top">
+            <div class="ticket-text">${escapeHtml(task.text)}</div>
+            <div class="badge" data-p="${task.priority}">${task.priority}</div>
+          </div>
+          <div class="ticket-meta">
+            <div class="timestamp">${fmtDateTime(task.createdAt)}</div>
+            <div class="ticket-actions">
+              <button class="edit">Edit</button>
+              <button class="del">Delete</button>
+            </div>
+          </div>
+        `;
+        el.querySelector('.edit').addEventListener('click', () => { editingId = task.id; render(); });
+        el.querySelector('.del').addEventListener('click', () => {
+          tasks = tasks.filter(t => t.id !== task.id);
+          saveTasks();
+          render();
+        });
+      }
+      list.appendChild(el);
+    });
+
+    updateShareButtons();
+  }
+
+  function escapeHtml(str){
+    const div = document.createElement('div');
+    div.textContent = str;
+    return div.innerHTML;
+  }
+
+  function updateShareButtons(){
+    const hasTasks = tasks.length > 0;
+    document.getElementById('waBtn').disabled = !hasTasks;
+    document.getElementById('mailBtn').disabled = !hasTasks;
+  }
+
+  function buildShareText(){
+    const order = { high: [], medium: [], low: [] };
+    sortedTasks().forEach(t => order[t.priority].push(t));
+    let lines = [`My task list — ${new Date().toLocaleDateString(undefined,{day:'2-digit',month:'short',year:'numeric'})}`, ''];
+    ['high','medium','low'].forEach(p => {
+      if(order[p].length){
+        lines.push(`— ${p.toUpperCase()} —`);
+        order[p].forEach(t => lines.push(`• ${t.text}  (${fmtDateTime(t.createdAt)})`));
+        lines.push('');
+      }
+    });
+    return lines.join('\n').trim();
+  }
+
+  // Add task
+  function addTask(){
+    const val = input.value.trim();
+    if(!val) return;
+    tasks.push({ id: uid(), text: val, priority: currentPriority, createdAt: Date.now() });
+    input.value = '';
+    input.style.height = 'auto';
+    saveTasks();
+    render();
+  }
+  addBtn.addEventListener('click', addTask);
+  input.addEventListener('keydown', (e) => {
+    if(e.key === 'Enter' && !e.shiftKey){
+      e.preventDefault();
+      addTask();
+    }
+  });
+  input.addEventListener('input', () => {
+    input.style.height = 'auto';
+    input.style.height = Math.min(input.scrollHeight, 140) + 'px';
+  });
+
+  document.querySelectorAll('.prio-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      currentPriority = btn.getAttribute('data-p');
+      document.querySelectorAll('.prio-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+    });
+  });
+
+  document.querySelectorAll('.sort-toggle button').forEach(btn => {
+    btn.addEventListener('click', () => {
+      sortMode = btn.getAttribute('data-sort');
+      document.querySelectorAll('.sort-toggle button').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      render();
+    });
+  });
+
+  document.getElementById('clearAllBtn').addEventListener('click', () => {
+    if(tasks.length === 0) return;
+    if(confirm('Clear all tasks? This cannot be undone.')){
+      tasks = [];
+      saveTasks();
+      render();
+    }
+  });
+
+  document.getElementById('waBtn').addEventListener('click', () => {
+    if(tasks.length === 0) return;
+    const text = encodeURIComponent(buildShareText());
+    window.open(`https://wa.me/?text=${text}`, '_blank');
+  });
+
+  document.getElementById('mailBtn').addEventListener('click', () => {
+    if(tasks.length === 0) return;
+    const subject = encodeURIComponent(`My task list — ${new Date().toLocaleDateString()}`);
+    const body = encodeURIComponent(buildShareText());
+    window.location.href = `mailto:?subject=${subject}&body=${body}`;
+  });
+
+  // Voice input (Web Speech API)
+  let recognition = null;
+  let listening = false;
+  const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+
+  if(SpeechRecognition){
+    recognition = new SpeechRecognition();
+    recognition.continuous = false;
+    recognition.interimResults = true;
+    recognition.lang = 'en-US';
+
+    recognition.onstart = () => {
+      listening = true;
+      micBtn.classList.add('listening');
+      micHint.textContent = 'Listening… speak your task';
+    };
+    recognition.onresult = (event) => {
+      let transcript = '';
+      for(let i = 0; i < event.results.length; i++){
+        transcript += event.results[i][0].transcript;
+      }
+      input.value = transcript;
+    };
+    recognition.onerror = (event) => {
+      micHint.textContent = event.error === 'not-allowed'
+        ? 'Microphone access denied — check browser permissions.'
+        : 'Could not hear that — try again.';
+    };
+    recognition.onend = () => {
+      listening = false;
+      micBtn.classList.remove('listening');
+      if(input.value.trim()){
+        micHint.textContent = 'Got it — tap "Add task" to save.';
+      } else {
+        micHint.textContent = '';
+      }
+    };
+    micBtn.addEventListener('click', () => {
+      if(listening){
+        recognition.stop();
+      } else {
+        input.value = '';
+        try{ recognition.start(); }catch(e){}
+      }
+    });
+  } else {
+    micBtn.disabled = true;
+    micBtn.style.opacity = '0.3';
+    micHint.textContent = 'Voice input not supported in this browser — try Chrome.';
+  }
+
+  // ---------- Automation (GitHub-backed auto send) ----------
+  const AUTO_KEY = 'relay:automation';
+  let autoConfig = { owner: '', repo: '', token: '', autoSend: false };
+
+  const autoHeader = document.getElementById('autoToggleHeader');
+  const autoBody = document.getElementById('autoBody');
+  const autoChevron = document.getElementById('autoChevron');
+  const autoStatus = document.getElementById('autoStatus');
+
+  autoHeader.addEventListener('click', () => {
+    const open = autoBody.style.display !== 'none';
+    autoBody.style.display = open ? 'none' : 'block';
+    autoChevron.classList.toggle('open', !open);
+  });
+
+  async function loadAutoConfig(){
+    try{
+      const res = await window.storage.get(AUTO_KEY, false);
+      if(res && res.value){
+        autoConfig = JSON.parse(res.value);
+        document.getElementById('ghOwner').value = autoConfig.owner || '';
+        document.getElementById('ghRepo').value = autoConfig.repo || '';
+        document.getElementById('ghToken').value = autoConfig.token || '';
+        document.getElementById('autoSendToggle').checked = !!autoConfig.autoSend;
+      }
+    }catch(e){ /* no config saved yet */ }
+  }
+
+  document.getElementById('autoSaveBtn').addEventListener('click', async () => {
+    autoConfig = {
+      owner: document.getElementById('ghOwner').value.trim(),
+      repo: document.getElementById('ghRepo').value.trim(),
+      token: document.getElementById('ghToken').value.trim(),
+      autoSend: document.getElementById('autoSendToggle').checked
+    };
+    if(!autoConfig.owner || !autoConfig.repo || !autoConfig.token){
+      autoStatus.textContent = 'Fill in username, repo, and token first.';
+      return;
+    }
+    try{
+      await window.storage.set(AUTO_KEY, JSON.stringify(autoConfig), false);
+      autoStatus.textContent = 'Saved. Syncing current list to GitHub…';
+      await syncTasksToGithub();
+      autoStatus.textContent = 'Connected — tasks will sync automatically.';
+    }catch(e){
+      autoStatus.textContent = 'Could not save settings — try again.';
+    }
+  });
+
+  document.getElementById('autoTestBtn').addEventListener('click', async () => {
+    if(!autoConfig.owner || !autoConfig.repo || !autoConfig.token){
+      autoStatus.textContent = 'Connect GitHub first (fill in fields above and Save).';
+      return;
+    }
+    autoStatus.textContent = 'Sending now…';
+    const ok = await syncTasksToGithub();
+    if(ok) await triggerInstantSend();
+  });
+
+  async function ghHeaders(){
+    return {
+      'Authorization': `Bearer ${autoConfig.token}`,
+      'Accept': 'application/vnd.github+json',
+      'Content-Type': 'application/json'
+    };
+  }
+
+  async function syncTasksToGithub(){
+    if(!autoConfig.owner || !autoConfig.repo || !autoConfig.token) return false;
+    try{
+      const base = `https://api.github.com/repos/${autoConfig.owner}/${autoConfig.repo}/contents/tasks.json`;
+      let sha = undefined;
+      const getRes = await fetch(base, { headers: await ghHeaders() });
+      if(getRes.ok){
+        const data = await getRes.json();
+        sha = data.sha;
+      }
+      const content = btoa(unescape(encodeURIComponent(JSON.stringify(tasks, null, 2))));
+      const putRes = await fetch(base, {
+        method: 'PUT',
+        headers: await ghHeaders(),
+        body: JSON.stringify({
+          message: 'Update tasks.json from Relay app',
+          content: content,
+          sha: sha
+        })
+      });
+      if(!putRes.ok){
+        const t = await putRes.text();
+        autoStatus.textContent = 'GitHub sync failed — check your token/repo settings.';
+        console.error('GitHub sync error', putRes.status, t);
+        return false;
+      }
+      return true;
+    }catch(e){
+      autoStatus.textContent = 'GitHub sync failed — check your connection.';
+      return false;
+    }
+  }
+
+  async function triggerInstantSend(){
+    if(!autoConfig.owner || !autoConfig.repo || !autoConfig.token) return false;
+    try{
+      const url = `https://api.github.com/repos/${autoConfig.owner}/${autoConfig.repo}/dispatches`;
+      const res = await fetch(url, {
+        method: 'POST',
+        headers: await ghHeaders(),
+        body: JSON.stringify({ event_type: 'send-now' })
+      });
+      if(res.ok){
+        autoStatus.textContent = 'Sent — check your email/WhatsApp shortly.';
+        return true;
+      } else {
+        autoStatus.textContent = 'Could not trigger send — check token permissions.';
+        return false;
+      }
+    }catch(e){
+      autoStatus.textContent = 'Could not trigger send — check your connection.';
+      return false;
+    }
+  }
+
+  // Wrap saveTasks so every change also syncs to GitHub when connected
+  const originalSaveTasks = saveTasks;
+  saveTasks = async function(){
+    await originalSaveTasks();
+    if(autoConfig.owner && autoConfig.repo && autoConfig.token){
+      const ok = await syncTasksToGithub();
+      if(ok && autoConfig.autoSend){
+        await triggerInstantSend();
+      }
+    }
+  };
+
+  loadAutoConfig();
+  loadTasks();
+
+  // Register service worker for offline support + installability
+  if ('serviceWorker' in navigator) {
+    window.addEventListener('load', () => {
+      navigator.serviceWorker.register('service-worker.js').catch(() => {});
+    });
+  }
+
+  // Optional: capture the install prompt so we could show a custom "Install" button later
+  let deferredInstallPrompt = null;
+  window.addEventListener('beforeinstallprompt', (e) => {
+    e.preventDefault();
+    deferredInstallPrompt = e;
+  });
+})();
+</script>
+
+</body>
+</html>
